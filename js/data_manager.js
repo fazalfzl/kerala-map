@@ -1,0 +1,231 @@
+/**
+ * DataManager
+ * Handles fetching real-time data from Google Sheets and resolving zip codes to districts.
+ */
+class DataManager {
+    constructor() {
+        this.sheetUrl = 'https://docs.google.com/spreadsheets/d/1K6Aq1BVmqt7y8PfOecO8FteKO1ONtXEeTc6DIZUUnwA/gviz/tq?tqx=out:csv';
+        this.zipApiUrl = 'https://api.postalpincode.in/pincode/';
+        this.zipCache = {}; // Cache for zip -> district mapping
+        this.processedData = {};
+    }
+
+    /**
+     * Fetches data from the Google Sheet
+     */
+    async fetchSheetData() {
+        try {
+            const response = await fetch(this.sheetUrl);
+            const csvText = await response.text();
+            return this.parseCSV(csvText);
+        } catch (error) {
+            console.error('Error fetching sheet data:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Parses CSV text into an array of objects
+     */
+    parseCSV(csvText) {
+        const lines = csvText.split('\n');
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+        const data = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const currentLine = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); // Split by comma ignoring commas in quotes
+
+            if (currentLine.length === headers.length) {
+                const row = {};
+                for (let j = 0; j < headers.length; j++) {
+                    let value = currentLine[j].replace(/"/g, '').trim();
+                    row[headers[j]] = value;
+                }
+                data.push(row);
+            }
+        }
+        return data;
+    }
+
+    /**
+     * Resolves a Zip code to a District using the external API
+     * Implements caching to avoid rate limits
+     */
+    async getDistrictFromZip(zipCode) {
+        if (!zipCode) return null;
+
+        // Check cache first
+        if (this.zipCache[zipCode]) {
+            return this.zipCache[zipCode];
+        }
+
+        try {
+            // Add a small delay to be nice to the API if we are making many requests
+            // In a real bulk scenario, we'd want a proper queue. 
+            // For now, we'll rely on the fact that we process sequentially or the browser limits concurrent requests.
+            const response = await fetch(`${this.zipApiUrl}${zipCode}`);
+            const data = await response.json();
+
+            if (data && data[0].Status === "Success" && data[0].PostOffice && data[0].PostOffice.length > 0) {
+                // Look for the district in the first PostOffice entry
+                // The API returns "District" field.
+                const district = data[0].PostOffice[0].District;
+
+                // Normalize district name to match our keys (lowercase, no spaces if needed)
+                // We'll return the raw API district name here and normalize later
+                this.zipCache[zipCode] = district;
+                return district;
+            }
+        } catch (error) {
+            console.warn(`Failed to resolve zip ${zipCode}:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * Normalizes district names to match our internal keys
+     */
+    normalizeDistrictName(districtName) {
+        if (!districtName) return null;
+        const lower = districtName.toLowerCase().trim();
+
+        // Map common variations to our keys
+        const map = {
+            'thiruvananthapuram': 'thiruvananthapuram',
+            'trivandrum': 'thiruvananthapuram',
+            'kollam': 'kollam',
+            'pathanamthitta': 'pathanamthitta',
+            'alappuzha': 'alappuzha',
+            'alleppey': 'alappuzha',
+            'kottayam': 'kottayam',
+            'idukki': 'idukki',
+            'ernakulam': 'ernakulam',
+            'cochin': 'ernakulam',
+            'kochi': 'ernakulam',
+            'thrissur': 'thrissur',
+            'trichur': 'thrissur',
+            'palakkad': 'palakkad',
+            'palghat': 'palakkad',
+            'malappuram': 'malappuram',
+            'kozhikode': 'kozhikode',
+            'calicut': 'kozhikode',
+            'wayanad': 'wayanad',
+            'kannur': 'kannur',
+            'cannanore': 'kannur',
+            'kasaragod': 'kasaragod',
+            'kasargod': 'kasaragod'
+        };
+
+        return map[lower] || null;
+    }
+
+    /**
+     * Main function to load and process data
+     */
+    async loadData() {
+        console.log("Starting data load...");
+        const rawData = await this.fetchSheetData();
+        console.log(`Fetched ${rawData.length} rows from sheet.`);
+
+        // Filter for Kerala only (based on state) and valid zip
+        // We look at billing_state or shipping_state
+        const keralaData = rawData.filter(row => {
+            const bState = (row['billing_state'] || '').toLowerCase();
+            const sState = (row['shipping_state'] || '').toLowerCase();
+            return bState.includes('kerala') || sState.includes('kerala');
+        });
+
+        console.log(`Filtered to ${keralaData.length} Kerala entries.`);
+
+        const districtStats = {};
+
+        // Initialize stats for all Kerala districts
+        const districtList = [
+            'kasaragod', 'kannur', 'wayanad', 'kozhikode', 'malappuram',
+            'palakkad', 'thrissur', 'ernakulam', 'idukki', 'kottayam',
+            'alappuzha', 'pathanamthitta', 'kollam', 'thiruvananthapuram'
+        ];
+
+        const districtDisplayNames = {
+            'kasaragod': 'Kasaragod',
+            'kannur': 'Kannur',
+            'wayanad': 'Wayanad',
+            'kozhikode': 'Kozhikode',
+            'malappuram': 'Malappuram',
+            'palakkad': 'Palakkad',
+            'thrissur': 'Thrissur',
+            'ernakulam': 'Ernakulam',
+            'idukki': 'Idukki',
+            'kottayam': 'Kottayam',
+            'alappuzha': 'Alappuzha',
+            'pathanamthitta': 'Pathanamthitta',
+            'kollam': 'Kollam',
+            'thiruvananthapuram': 'Thiruvananthapuram'
+        };
+
+        for (const district of districtList) {
+            districtStats[district] = {
+                name: districtDisplayNames[district],
+                population: 'N/A',
+                dealerCount: 0,
+                currentSales: 0,
+                monthlyTarget: 500000, // Fixed 5 lakh target
+                dealers: []
+            };
+        }
+
+        // Process each row
+        for (const row of keralaData) {
+            let zip = row['billing_zipcode'] || row['shipping_zipcode'];
+            if (!zip) continue;
+
+            // Clean zip (remove spaces)
+            zip = zip.replace(/\s/g, '');
+
+            const districtName = await this.getDistrictFromZip(zip);
+            const districtKey = this.normalizeDistrictName(districtName);
+
+            if (districtKey && districtStats[districtKey]) {
+                districtStats[districtKey].dealerCount += 1;
+
+                // Parse sales
+                let sales = parseFloat(row['sales'] || 0);
+                if (isNaN(sales)) sales = 0;
+
+                districtStats[districtKey].currentSales += sales;
+
+                // Store dealer info
+                districtStats[districtKey].dealers.push({
+                    name: row['customer_name'] || 'Unknown Dealer',
+                    sales: sales
+                });
+            }
+        }
+
+        // Finalize stats
+        for (const key in districtStats) {
+            const stats = districtStats[key];
+
+            // Sort dealers by sales descending
+            stats.dealers.sort((a, b) => b.sales - a.sales);
+
+            // Calculate Achievement based on fixed 5 lakh monthly target
+            // Achievement = (Current Sales / Monthly Target) * 100
+            const target = stats.monthlyTarget;
+            if (target > 0) {
+                stats.achievement = ((stats.currentSales / target) * 100).toFixed(1) + "%";
+            } else {
+                stats.achievement = "0.0%";
+            }
+
+            // Keep currentSales as number for calculations, will format in UI
+            // No need to format here: stats.currentSales = stats.currentSales.toFixed(2);
+        }
+
+        console.log("Data processing complete:", districtStats);
+        return districtStats;
+    }
+}
+
+// Expose to window
+window.DataManager = DataManager;

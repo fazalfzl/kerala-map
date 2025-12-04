@@ -1,10 +1,5 @@
-// Load district insights
-// districtInsights is loaded from data/district_insights.js
-let districtInsights = window.districtInsights || {};
-
-if (Object.keys(districtInsights).length === 0) {
-    console.error('District insights not loaded or empty.');
-}
+// District insights will be populated by DataManager
+let districtInsights = {};
 
 // District data with names and descriptions (for fallback)
 const districtData = {
@@ -24,6 +19,7 @@ const infoPanel = document.getElementById('info-panel');
 const districtName = document.getElementById('district-name');
 const districtDescription = document.getElementById('district-description');
 const colorGradeToggle = document.getElementById('color-grade-toggle');
+const loadingOverlay = document.getElementById('loading-overlay');
 
 // Color grading function based on achievement percentage
 function getColorByAchievement(achievement) {
@@ -105,7 +101,7 @@ districts.forEach(district => {
                     </div>
                     <div class="insight-row">
                         <span class="insight-label">Total Annual Sales:</span>
-                        <span class="insight-value">₹${(parseFloat(insights.totalSales) / 100000).toFixed(2)}L</span>
+                        <span class="insight-value">₹${(parseFloat(insights.totalSales || insights.currentSales) / 100000).toFixed(2)}L</span>
                     </div>
                     <div class="insight-row">
                         <span class="insight-label">Monthly Target:</span>
@@ -120,13 +116,15 @@ districts.forEach(district => {
                         <span class="insight-value ${parseFloat(insights.achievement) >= 100 ? 'success' : parseFloat(insights.achievement) >= 70 ? 'warning' : 'danger'}">${insights.achievement}</span>
                     </div>
                     <div class="insight-section">
-                        <div class="insight-subtitle">Top Dealer Sales Distribution</div>
-                        ${insights.top3Percentages.map((pct, i) => `
+                        <div class="insight-subtitle">Dealer Sales Distribution</div>
+                        <div class="dealers-list">
+                        ${insights.dealers && insights.dealers.length > 0 ? insights.dealers.map((dealer, i) => `
                             <div class="sales-bar">
-                                <div class="sales-bar-fill" style="width: ${pct}"></div>
-                                <span class="sales-bar-label">Dealer ${i + 1}: ${pct} (₹${(parseFloat(insights.top3Sales[i]) / 100000).toFixed(2)}L)</span>
+                                <div class="sales-bar-fill" style="width: ${(dealer.sales / parseFloat(insights.currentSales) * 100).toFixed(1)}%"></div>
+                                <span class="sales-bar-label">${dealer.name}: ₹${(dealer.sales / 100000).toFixed(2)}L</span>
                             </div>
-                        `).join('')}
+                        `).join('') : '<p style="color:var(--text-muted)">No sales data available</p>'}
+                        </div>
                     </div>
                 </div>
             `;
@@ -138,6 +136,11 @@ districts.forEach(district => {
             districtName.textContent = fallback.name;
             districtDescription.textContent = fallback.description;
             infoPanel.classList.add('active');
+        } else {
+            // Generic fallback if no data at all
+            districtName.textContent = districtId.charAt(0).toUpperCase() + districtId.slice(1);
+            districtDescription.textContent = "No data available for this district.";
+            infoPanel.classList.add('active');
         }
     });
 });
@@ -147,3 +150,39 @@ document.addEventListener('click', function () {
     districts.forEach(d => d.classList.remove('active'));
     infoPanel.classList.remove('active');
 });
+
+// Initialize Data
+async function init() {
+    if (window.DataManager) {
+        const dataManager = new window.DataManager();
+        try {
+            const data = await dataManager.loadData();
+            if (data && Object.keys(data).length > 0) {
+                districtInsights = data;
+                window.districtInsights = data;
+                console.log("District insights updated with real-time data.");
+
+                // Refresh view if needed
+                if (colorGradeToggle && colorGradeToggle.checked) {
+                    applyColorGrading();
+                }
+            } else {
+                console.warn("No data fetched, using defaults or empty state.");
+            }
+        } catch (e) {
+            console.error("Failed to load data:", e);
+        } finally {
+            // Hide loading
+            if (loadingOverlay) {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+    } else {
+        console.error("DataManager not found!");
+        if (loadingOverlay) loadingOverlay.classList.add('hidden');
+    }
+}
+
+// Start initialization
+init();
+
