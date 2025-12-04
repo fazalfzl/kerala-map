@@ -93,8 +93,8 @@ h1 {
 
 .district {
     fill: var(--district-base);
-    stroke: var(--district-stroke);
-    stroke-width: 2;
+    stroke: #000000;
+    stroke-width: 3;
     cursor: pointer;
     transition: all var(--transition-normal);
     transform-origin: center;
@@ -102,8 +102,8 @@ h1 {
 
 .district:hover {
     fill: var(--district-hover);
-    stroke: var(--district-stroke-hover);
-    stroke-width: 3;
+    stroke: #000000;
+    stroke-width: 4;
     filter: drop-shadow(var(--shadow-glow));
     transform: scale(1.05);
     animation: pulse 1.5s infinite;
@@ -111,8 +111,8 @@ h1 {
 
 .district.active {
     fill: var(--accent-primary);
-    stroke: var(--accent-secondary);
-    stroke-width: 3;
+    stroke: #000000;
+    stroke-width: 4;
     filter: drop-shadow(var(--shadow-glow));
 }
 
@@ -369,6 +369,7 @@ html {
     color: var(--text-primary);
     font-weight: 500;
 }
+
 /* Toggle Switch */
 .toggle-container {
     display: flex;
@@ -413,15 +414,15 @@ html {
     transition: .4s;
 }
 
-input:checked + .slider {
+input:checked+.slider {
     background-color: var(--accent-primary);
 }
 
-input:focus + .slider {
+input:focus+.slider {
     box-shadow: 0 0 1px var(--accent-primary);
 }
 
-input:checked + .slider:before {
+input:checked+.slider:before {
     transform: translateX(26px);
 }
 
@@ -442,25 +443,21 @@ input:checked + .slider:before {
 /* Color Grade Classes */
 .district.fill-success {
     fill: #10b981 !important;
-    stroke: #059669 !important;
+    stroke: #000000 !important;
+    stroke-width: 3 !important;
 }
 
 .district.fill-warning {
     fill: #f59e0b !important;
-    stroke: #d97706 !important;
+    stroke: #000000 !important;
+    stroke-width: 3 !important;
 }
 
 .district.fill-danger {
     fill: #ef4444 !important;
-    stroke: #b91c1c !important;
+    stroke: #000000 !important;
+    stroke-width: 3 !important;
 }
-
-.district.active {
-    stroke: var(--text-primary) !important;
-    stroke-width: 4px !important;
-    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
-}
-
 
 /* Loading Overlay */
 .loading-overlay {
@@ -501,5 +498,7 @@ input:checked + .slider:before {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
